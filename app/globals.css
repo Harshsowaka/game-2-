@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  background: #f9fafb;
+  color: #1f2937;
+}
+
+canvas {
+  display: block;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  cursor: crosshair;
+}
+
+.timer {
+  font-size: 2rem;
+  font-weight: bold;
+  transition: color 0.2s;
+}
+
+.timer.warning {
+  color: #ef4444;
+}
