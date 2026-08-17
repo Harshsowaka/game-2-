@@ -24,6 +24,13 @@ const DIFFICULTY_OPTIONS = [
   { label: '🔥 Hard', value: 'hard' },
 ]
 
+const ROUNDS_OPTIONS = [
+  { label: '1', value: 1 },
+  { label: '3', value: 3 },
+  { label: '5', value: 5 },
+  { label: '10', value: 10 },
+]
+
 function GamePageInner() {
   const searchParams = useSearchParams()
   const code = searchParams?.get('code') || ''
@@ -47,6 +54,8 @@ function GamePageInner() {
   // lobby settings (host-controlled)
   const [roundDuration, setRoundDuration] = useState(90)
   const [difficulty, setDifficulty] = useState('medium')
+  const [totalRounds, setTotalRounds] = useState(3)
+  const [currentRound, setCurrentRound] = useState(0)
   const [hostId, setHostId] = useState('')
 
   const canvasRef = useRef<GameCanvasHandle>(null)
@@ -76,21 +85,22 @@ function GamePageInner() {
       socket.emit('join-room', { code, name: playerName })
     })
 
-    socket.on('room-update', ({ players, hostId, gameState, drawerIndex, roundDuration, difficulty }: {
+    socket.on('room-update', ({ players, hostId, gameState, drawerIndex, roundDuration, difficulty, totalRounds }: {
       players: Player[]; hostId: string; gameState: string; drawerIndex: number;
-      roundDuration: number; difficulty: string
+      roundDuration: number; difficulty: string; totalRounds: number
     }) => {
       setPlayers(players)
       setHostId(hostId)
       setGameState(gameState)
       setRoundDuration(roundDuration)
       setDifficulty(difficulty)
+      if (totalRounds) setTotalRounds(totalRounds)
       if (players[drawerIndex]) setDrawerSocketId(players[drawerIndex].id)
     })
 
-    socket.on('round-started', ({ players, drawerSocketId, word, wordLength, hint, timeLeft, roundDuration }: {
+    socket.on('round-started', ({ players, drawerSocketId, word, wordLength, hint, timeLeft, roundDuration, currentRound, totalRounds }: {
       players: Player[]; drawerSocketId: string; word: string | null; wordLength: number;
-      hint: string; timeLeft: number; roundDuration: number
+      hint: string; timeLeft: number; roundDuration: number; currentRound: number; totalRounds: number
     }) => {
       setPlayers(players)
       setDrawerSocketId(drawerSocketId)
@@ -99,11 +109,19 @@ function GamePageInner() {
       setHint(hint)
       setTimeLeft(timeLeft)
       setRoundDuration(roundDuration)
+      setCurrentRound(currentRound)
+      setTotalRounds(totalRounds)
       setGuesses([])
       setGuessInput('')
       setMyGuessCorrect(false)
       setCorrectCount(0)
       setGameState('playing')
+    })
+
+    socket.on('game-over', ({ word, players }: { word: string; players: Player[] }) => {
+      setRoundWord(word)
+      setPlayers(players)
+      setGameState('gameover')
     })
 
     socket.on('timer-tick', ({ timeLeft }: { timeLeft: number }) => {
@@ -135,9 +153,11 @@ function GamePageInner() {
       guessInputRef.current?.blur()
     })
 
-    socket.on('round-ended', ({ word, players }: { word: string; players: Player[] }) => {
+    socket.on('round-ended', ({ word, players, currentRound, totalRounds }: { word: string; players: Player[]; currentRound: number; totalRounds: number }) => {
       setRoundWord(word)
       setPlayers(players)
+      setCurrentRound(currentRound)
+      setTotalRounds(totalRounds)
       setGameState('roundend')
     })
 
@@ -155,11 +175,12 @@ function GamePageInner() {
   }, [playerName, code])
 
   // Emit settings changes immediately (host only)
-  const updateSettings = (newDuration?: number, newDifficulty?: string) => {
+  const updateSettings = (newDuration?: number, newDifficulty?: string, newTotalRounds?: number) => {
     socketRef.current?.emit('set-settings', {
       code,
       roundDuration: newDuration ?? roundDuration,
       difficulty: newDifficulty ?? difficulty,
+      totalRounds: newTotalRounds ?? totalRounds,
     })
   }
 
@@ -332,6 +353,30 @@ function GamePageInner() {
                     </div>
                   </div>
                 </div>
+                {/* Rounds */}
+                <div className="mt-4">
+                  <p className="text-xs font-bold text-gray-500 mb-2">🔄 Number of rounds</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {ROUNDS_OPTIONS.map(opt => (
+                      <button key={opt.value}
+                        disabled={!isHost}
+                        onClick={() => {
+                          setTotalRounds(opt.value)
+                          updateSettings(undefined, undefined, opt.value)
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-sm transition ${
+                          totalRounds === opt.value
+                            ? 'text-white shadow-md'
+                            : 'bg-white text-gray-400 border border-gray-200 hover:border-purple-300 disabled:hover:border-gray-200'
+                        } ${!isHost ? 'cursor-default' : ''}`}
+                        style={totalRounds === opt.value
+                          ? { background: 'linear-gradient(135deg, #10b981, #059669)' }
+                          : {}}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {isHost ? (
@@ -355,6 +400,13 @@ function GamePageInner() {
 
             {/* Left — canvas 3/5 */}
             <div className="lg:col-span-3 space-y-4">
+
+              {/* Round counter */}
+              <div className="flex justify-center">
+                <div className="bg-white rounded-2xl px-5 py-2 shadow text-sm font-black text-purple-600 tracking-wide">
+                  Round {currentRound} / {totalRounds}
+                </div>
+              </div>
 
               {/* Role banner */}
               {isDrawing ? (
@@ -549,6 +601,7 @@ function GamePageInner() {
             <div className="bg-white rounded-3xl shadow-2xl text-center p-10 max-w-sm w-full">
               <div className="text-6xl mb-4">🎉</div>
               <h2 className="text-3xl font-black text-gray-800 mb-2">Round Over!</h2>
+              <p className="text-purple-400 text-sm font-bold mb-3">Round {currentRound} of {totalRounds}</p>
               <p className="text-gray-400 text-sm mb-2">The word was:</p>
               <p className="text-4xl font-black uppercase mb-1 tracking-wide"
                 style={{ color: '#7c3aed' }}>
@@ -568,6 +621,38 @@ function GamePageInner() {
                   Waiting for host to start next round...
                 </p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Game over screen */}
+        {gameState === 'gameover' && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-40 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl text-center p-10 max-w-sm w-full">
+              <div className="text-6xl mb-4">🏆</div>
+              <h2 className="text-3xl font-black text-gray-800 mb-2">Game Over!</h2>
+              <p className="text-gray-400 text-sm mb-2">Last word was:</p>
+              <p className="text-3xl font-black uppercase mb-6 tracking-wide" style={{ color: '#7c3aed' }}>
+                {roundWord}
+              </p>
+              <div className="space-y-2 mb-8 text-left">
+                {[...players].sort((a, b) => b.score - a.score).map((p, idx) => (
+                  <div key={p.id} className={`flex items-center justify-between px-4 py-3 rounded-2xl ${
+                    idx === 0 ? 'bg-yellow-50 border-2 border-yellow-200' : 'bg-gray-50 border border-gray-100'
+                  }`}>
+                    <span className="font-bold text-gray-800">
+                      {idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : `${idx + 1}. `}
+                      {p.name}{p.id === socketId ? ' (you)' : ''}
+                    </span>
+                    <span className="font-black text-purple-600">{p.score} pts</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => window.location.href = '/'}
+                className="w-full py-4 rounded-2xl font-black text-lg text-white transition-all hover:opacity-90 active:scale-[0.98] shadow-lg"
+                style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+                Play Again
+              </button>
             </div>
           </div>
         )}

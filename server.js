@@ -33,6 +33,7 @@ const WORDS = {
 }
 
 const DEFAULT_DURATION = 90
+const DEFAULT_ROUNDS = 3
 const rooms = {}
 
 function randomWord(difficulty = 'medium') {
@@ -60,6 +61,7 @@ function startRound(io, code) {
   if (room.timer) { clearInterval(room.timer); room.timer = null }
 
   room.gameState = 'playing'
+  room.currentRound++
   room.currentWord = randomWord(room.difficulty)
   room.correctGuessers = new Set()
   room.correctCount = 0
@@ -91,6 +93,8 @@ function startRound(io, code) {
       hint: initialHint,
       timeLeft: duration,
       roundDuration: duration,
+      currentRound: room.currentRound,
+      totalRounds: room.totalRounds,
     })
   }
 
@@ -123,11 +127,22 @@ function endRound(io, code) {
   const room = rooms[code]
   if (!room || room.gameState !== 'playing') return
   if (room.timer) { clearInterval(room.timer); room.timer = null }
-  room.gameState = 'roundend'
-  io.to(code).emit('round-ended', {
-    word: room.currentWord,
-    players: playerList(room),
-  })
+
+  if (room.currentRound >= room.totalRounds) {
+    room.gameState = 'gameover'
+    io.to(code).emit('game-over', {
+      word: room.currentWord,
+      players: playerList(room),
+    })
+  } else {
+    room.gameState = 'roundend'
+    io.to(code).emit('round-ended', {
+      word: room.currentWord,
+      players: playerList(room),
+      currentRound: room.currentRound,
+      totalRounds: room.totalRounds,
+    })
+  }
 }
 
 const app = next({ dev })
@@ -157,6 +172,8 @@ app.prepare().then(() => {
           correctCount: 0,
           roundDuration: DEFAULT_DURATION,
           difficulty: 'medium',
+          totalRounds: DEFAULT_ROUNDS,
+          currentRound: 0,
           hintOrder: [],
           revealedCount: 0,
         }
@@ -175,16 +192,18 @@ app.prepare().then(() => {
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
         difficulty: room.difficulty,
+        totalRounds: room.totalRounds,
       })
     })
 
     // Host updates settings in lobby
-    socket.on('set-settings', ({ code, roundDuration, difficulty }) => {
+    socket.on('set-settings', ({ code, roundDuration, difficulty, totalRounds }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'lobby') return
       if (room.hostId !== socket.id) return
       if (roundDuration) room.roundDuration = roundDuration
       if (difficulty) room.difficulty = difficulty
+      if (totalRounds) room.totalRounds = totalRounds
       io.to(code).emit('room-update', {
         players: playerList(room),
         hostId: room.hostId,
@@ -192,6 +211,7 @@ app.prepare().then(() => {
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
         difficulty: room.difficulty,
+        totalRounds: room.totalRounds,
       })
     })
 
@@ -200,6 +220,7 @@ app.prepare().then(() => {
       if (!room || room.gameState !== 'lobby') return
       if (room.hostId !== socket.id) return
       room.drawerIndex = 0
+      room.currentRound = 0
       startRound(io, code)
     })
 
@@ -292,6 +313,7 @@ app.prepare().then(() => {
           drawerIndex: room.drawerIndex,
           roundDuration: room.roundDuration,
           difficulty: room.difficulty,
+          totalRounds: room.totalRounds,
         })
       }
     })
