@@ -47,13 +47,14 @@ function GamePageInner() {
   // lobby settings (host-controlled)
   const [roundDuration, setRoundDuration] = useState(90)
   const [difficulty, setDifficulty] = useState('medium')
+  const [hostId, setHostId] = useState('')
 
   const canvasRef = useRef<GameCanvasHandle>(null)
   const socketRef = useRef<Socket | null>(null)
   const guessInputRef = useRef<HTMLInputElement>(null)
 
   const isDrawing = !!socketId && socketId === drawerSocketId
-  const isHost = players.length > 0 && players[0].id === socketId
+  const isHost = !!socketId && socketId === hostId
   const scores = Object.fromEntries(players.map(p => [p.name, p.score]))
   const drawerName = players.find(p => p.id === drawerSocketId)?.name || ''
 
@@ -75,11 +76,12 @@ function GamePageInner() {
       socket.emit('join-room', { code, name: playerName })
     })
 
-    socket.on('room-update', ({ players, gameState, drawerIndex, roundDuration, difficulty }: {
-      players: Player[]; gameState: string; drawerIndex: number;
+    socket.on('room-update', ({ players, hostId, gameState, drawerIndex, roundDuration, difficulty }: {
+      players: Player[]; hostId: string; gameState: string; drawerIndex: number;
       roundDuration: number; difficulty: string
     }) => {
       setPlayers(players)
+      setHostId(hostId)
       setGameState(gameState)
       setRoundDuration(roundDuration)
       setDifficulty(difficulty)
@@ -268,7 +270,7 @@ function GamePageInner() {
                       {player.name[0].toUpperCase()}
                     </div>
                     <p className="font-bold text-gray-800 text-sm">{player.name}</p>
-                    {player.id === players[0]?.id && (
+                    {player.id === hostId && (
                       <p className="text-xs text-purple-500 font-bold mt-1">👑 Host</p>
                     )}
                   </div>

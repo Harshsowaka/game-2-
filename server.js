@@ -148,6 +148,7 @@ app.prepare().then(() => {
       if (!rooms[code]) {
         rooms[code] = {
           players: [],
+          hostId: socket.id,
           drawerIndex: 0,
           currentWord: '',
           gameState: 'lobby',
@@ -169,6 +170,7 @@ app.prepare().then(() => {
 
       io.to(code).emit('room-update', {
         players: playerList(room),
+        hostId: room.hostId,
         gameState: room.gameState,
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
@@ -180,11 +182,12 @@ app.prepare().then(() => {
     socket.on('set-settings', ({ code, roundDuration, difficulty }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'lobby') return
-      if (room.players[0]?.id !== socket.id) return
+      if (room.hostId !== socket.id) return
       if (roundDuration) room.roundDuration = roundDuration
       if (difficulty) room.difficulty = difficulty
       io.to(code).emit('room-update', {
         players: playerList(room),
+        hostId: room.hostId,
         gameState: room.gameState,
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
@@ -195,7 +198,7 @@ app.prepare().then(() => {
     socket.on('start-game', ({ code }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'lobby') return
-      if (room.players[0]?.id !== socket.id) return
+      if (room.hostId !== socket.id) return
       room.drawerIndex = 0
       startRound(io, code)
     })
@@ -203,7 +206,7 @@ app.prepare().then(() => {
     socket.on('next-round', ({ code }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'roundend') return
-      if (room.players[0]?.id !== socket.id) return
+      if (room.hostId !== socket.id) return
       room.drawerIndex = (room.drawerIndex + 1) % room.players.length
       startRound(io, code)
     })
@@ -281,8 +284,10 @@ app.prepare().then(() => {
         delete rooms[code]
       } else {
         if (room.drawerIndex >= room.players.length) room.drawerIndex = 0
+        if (room.hostId === socket.id) room.hostId = room.players[0].id
         io.to(code).emit('room-update', {
           players: playerList(room),
+          hostId: room.hostId,
           gameState: room.gameState,
           drawerIndex: room.drawerIndex,
           roundDuration: room.roundDuration,
