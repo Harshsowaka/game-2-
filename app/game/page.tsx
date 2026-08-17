@@ -187,6 +187,20 @@ function GamePageInner() {
   const handleStartGame = () => socketRef.current?.emit('start-game', { code })
   const handleNextRound = () => socketRef.current?.emit('next-round', { code })
 
+  const handleShareLeaderboard = () => {
+    const medals = ['🥇', '🥈', '🥉']
+    const sorted = [...players].sort((a, b) => b.score - a.score)
+    const lines = sorted.map((p, i) =>
+      `${medals[i] ?? `${i + 1}.`} ${p.name} — ${p.score} pts`
+    )
+    const text = `🏆 Sowaka Scribble Results\n\n${lines.join('\n')}\n\nPlay at: https://game-2-w8ur.onrender.com`
+    if (navigator.share) {
+      navigator.share({ title: 'Sowaka Scribble Results', text })
+    } else {
+      navigator.clipboard.writeText(text).then(() => alert('Leaderboard copied to clipboard!'))
+    }
+  }
+
   const handleStroke = (type: 'start' | 'move' | 'end', xn: number, yn: number) => {
     socketRef.current?.emit('draw', { code, type, xn, yn })
   }
@@ -627,32 +641,64 @@ function GamePageInner() {
 
         {/* Game over screen */}
         {gameState === 'gameover' && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-40 p-4">
-            <div className="bg-white rounded-3xl shadow-2xl text-center p-10 max-w-sm w-full">
-              <div className="text-6xl mb-4">🏆</div>
-              <h2 className="text-3xl font-black text-gray-800 mb-2">Game Over!</h2>
-              <p className="text-gray-400 text-sm mb-2">Last word was:</p>
-              <p className="text-3xl font-black uppercase mb-6 tracking-wide" style={{ color: '#7c3aed' }}>
-                {roundWord}
-              </p>
-              <div className="space-y-2 mb-8 text-left">
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md my-auto overflow-hidden">
+              {/* Header */}
+              <div className="h-1.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #7c3aed)' }} />
+              <div className="px-8 pt-8 pb-4 text-center">
+                <div className="text-5xl mb-3">🏆</div>
+                <h2 className="text-3xl font-black text-gray-800 mb-1">Game Over!</h2>
+                <p className="text-gray-400 text-sm">Final Leaderboard · {totalRounds} rounds played</p>
+              </div>
+
+              {/* Winner spotlight */}
+              {(() => {
+                const winner = [...players].sort((a, b) => b.score - a.score)[0]
+                return winner ? (
+                  <div className="mx-8 mb-5 rounded-2xl p-5 text-center"
+                    style={{ background: 'linear-gradient(135deg, #fef9c3, #fef3c7)', border: '2px solid #fcd34d' }}>
+                    <p className="text-xs font-black text-yellow-600 uppercase tracking-widest mb-1">Winner</p>
+                    <p className="text-2xl font-black text-gray-800">{winner.name}</p>
+                    <p className="text-yellow-600 font-black text-lg">{winner.score} pts</p>
+                  </div>
+                ) : null
+              })()}
+
+              {/* Full leaderboard */}
+              <div className="px-8 pb-6 space-y-2">
                 {[...players].sort((a, b) => b.score - a.score).map((p, idx) => (
                   <div key={p.id} className={`flex items-center justify-between px-4 py-3 rounded-2xl ${
-                    idx === 0 ? 'bg-yellow-50 border-2 border-yellow-200' : 'bg-gray-50 border border-gray-100'
+                    idx === 0 ? 'bg-yellow-50 border-2 border-yellow-200' :
+                    idx === 1 ? 'bg-gray-50 border-2 border-gray-200' :
+                    idx === 2 ? 'bg-orange-50 border-2 border-orange-100' :
+                    'bg-gray-50 border border-gray-100'
                   }`}>
-                    <span className="font-bold text-gray-800">
-                      {idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : `${idx + 1}. `}
-                      {p.name}{p.id === socketId ? ' (you)' : ''}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl w-8 text-center">
+                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
+                      </span>
+                      <span className="font-bold text-gray-800">
+                        {p.name}{p.id === socketId ? ' (you)' : ''}
+                      </span>
+                    </div>
                     <span className="font-black text-purple-600">{p.score} pts</span>
                   </div>
                 ))}
               </div>
-              <button onClick={() => window.location.href = '/'}
-                className="w-full py-4 rounded-2xl font-black text-lg text-white transition-all hover:opacity-90 active:scale-[0.98] shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
-                Play Again
-              </button>
+
+              {/* Actions */}
+              <div className="px-8 pb-8 flex gap-3">
+                <button onClick={handleShareLeaderboard}
+                  className="flex-1 py-3.5 rounded-2xl font-black text-white transition-all hover:opacity-90 active:scale-[0.98] shadow-md flex items-center justify-center gap-2"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                  📤 Share Results
+                </button>
+                <button onClick={() => window.location.href = '/'}
+                  className="flex-1 py-3.5 rounded-2xl font-black text-white transition-all hover:opacity-90 active:scale-[0.98] shadow-md"
+                  style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+                  Play Again
+                </button>
+              </div>
             </div>
           </div>
         )}
