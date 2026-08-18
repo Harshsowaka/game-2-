@@ -296,7 +296,7 @@ function GamePageInner() {
                 <p className="text-5xl font-black text-purple-600 tracking-[0.3em] mb-4">{code}</p>
                 <button
                   onClick={() => {
-                    const url = `${window.location.origin}/game?code=${code}`
+                    const url = `${window.location.origin}/?join=${code}`
                     if (navigator.share) {
                       navigator.share({ title: 'Join my Sowaka Scribble game!', text: `Join my game with code ${code}`, url })
                     } else {

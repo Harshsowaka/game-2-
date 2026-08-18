@@ -11,6 +11,9 @@ export default function Home() {
   useEffect(() => {
     fetchLeaderboard()
     const interval = setInterval(fetchLeaderboard, 5000)
+    // Pre-fill join code if URL has ?join=CODE (from share link)
+    const joinParam = new URLSearchParams(window.location.search).get('join')
+    if (joinParam) setJoinCode(joinParam.toUpperCase())
     return () => clearInterval(interval)
   }, [])
 
