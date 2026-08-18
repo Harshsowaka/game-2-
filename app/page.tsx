@@ -31,7 +31,7 @@ export default function Home() {
     if (!playerName.trim()) return alert('Please enter your name')
     const code = Math.random().toString(36).substring(2, 8).toUpperCase()
     localStorage.setItem('playerName', playerName)
-    window.location.href = `/game?code=${code}`
+    window.location.href = `/game?code=${code}&creator=1`
   }
 
   const handleJoinGame = () => {

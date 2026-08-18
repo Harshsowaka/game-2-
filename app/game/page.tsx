@@ -34,6 +34,7 @@ const ROUNDS_OPTIONS = [
 function GamePageInner() {
   const searchParams = useSearchParams()
   const code = searchParams?.get('code') || ''
+  const isCreator = searchParams?.get('creator') === '1'
 
   const [playerName, setPlayerName] = useState('')
   const [socketId, setSocketId] = useState('')
@@ -82,7 +83,12 @@ function GamePageInner() {
     socket.on('connect', () => {
       setSocketId(socket.id ?? '')
       setConnected(true)
-      socket.emit('join-room', { code, name: playerName })
+      socket.emit('join-room', { code, name: playerName, isCreator })
+    })
+
+    socket.on('room-not-found', () => {
+      alert('Room not found. The host may have left. Ask them to create a new game.')
+      window.location.href = '/'
     })
 
     socket.on('room-update', ({ players, hostId, gameState, drawerIndex, roundDuration, difficulty, totalRounds }: {
@@ -172,7 +178,7 @@ function GamePageInner() {
     socket.on('disconnect', () => setConnected(false))
 
     return () => { socket.disconnect() }
-  }, [playerName, code])
+  }, [playerName, code, isCreator])
 
   // Emit settings changes immediately (host only)
   const updateSettings = (newDuration?: number, newDifficulty?: string, newTotalRounds?: number) => {

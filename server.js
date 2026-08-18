@@ -159,8 +159,12 @@ app.prepare().then(() => {
 
   io.on('connection', (socket) => {
 
-    socket.on('join-room', ({ code, name }) => {
+    socket.on('join-room', ({ code, name, isCreator }) => {
       if (!rooms[code]) {
+        if (!isCreator) {
+          socket.emit('room-not-found')
+          return
+        }
         rooms[code] = {
           players: [],
           hostId: socket.id,
