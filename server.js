@@ -36,13 +36,16 @@ const DEFAULT_DURATION = 90
 const DEFAULT_ROUNDS = 3
 const rooms = {}
 
+// Temporarily stores scores of disconnected players for 60s so they can rejoin
+const disconnectedScores = {} // playerId → score
+
 function randomWord(difficulty = 'medium') {
   const pool = WORDS[difficulty] || WORDS.medium
   return pool[Math.floor(Math.random() * pool.length)]
 }
 
 function playerList(room) {
-  return room.players.map(p => ({ id: p.id, name: p.name, score: p.score }))
+  return room.players.map(p => ({ id: p.id, playerId: p.playerId, name: p.name, score: p.score }))
 }
 
 // Build the hint string: revealed letters shown, others as _
@@ -88,7 +91,8 @@ function startRound(io, code) {
     s.emit('round-started', {
       players: playerList(room),
       drawerSocketId: drawer.id,
-      word: p.id === drawer.id ? word : null,
+      drawerPlayerId: drawer.playerId,
+      word: p.playerId === drawer.playerId ? word : null,
       wordLength: word.length,
       hint: initialHint,
       timeLeft: duration,
@@ -113,7 +117,7 @@ function startRound(io, code) {
       const hint = buildHint(word, room.hintOrder, room.revealedCount)
       // Send hint only to non-drawers
       for (const p of room.players) {
-        if (p.id === drawer.id) continue
+        if (p.playerId === drawer.playerId) continue
         const s = io.sockets.sockets.get(p.id)
         if (s) s.emit('hint-update', { hint })
       }
@@ -159,7 +163,7 @@ app.prepare().then(() => {
 
   io.on('connection', (socket) => {
 
-    socket.on('join-room', ({ code, name, isCreator }) => {
+    socket.on('join-room', ({ code, name, playerId, isCreator }) => {
       if (!rooms[code]) {
         if (!isCreator) {
           socket.emit('room-not-found')
@@ -167,7 +171,7 @@ app.prepare().then(() => {
         }
         rooms[code] = {
           players: [],
-          hostId: socket.id,
+          hostPlayerId: playerId,
           drawerIndex: 0,
           currentWord: '',
           gameState: 'lobby',
@@ -183,15 +187,24 @@ app.prepare().then(() => {
         }
       }
       const room = rooms[code]
-      room.players = room.players.filter(p => p.id !== socket.id)
-      room.players.push({ id: socket.id, name, score: 0 })
+
+      // Reconnecting player: update their socket ID, restore score
+      const existing = room.players.find(p => p.playerId === playerId)
+      if (existing) {
+        existing.id = socket.id
+      } else {
+        const prevScore = disconnectedScores[playerId] || 0
+        delete disconnectedScores[playerId]
+        room.players.push({ id: socket.id, playerId, name, score: prevScore })
+      }
+
       socket.join(code)
       socket.data.code = code
-      socket.data.name = name
+      socket.data.playerId = playerId
 
       io.to(code).emit('room-update', {
         players: playerList(room),
-        hostId: room.hostId,
+        hostPlayerId: room.hostPlayerId,
         gameState: room.gameState,
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
@@ -204,13 +217,13 @@ app.prepare().then(() => {
     socket.on('set-settings', ({ code, roundDuration, difficulty, totalRounds }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'lobby') return
-      if (room.hostId !== socket.id) return
+      if (room.hostPlayerId !== socket.data.playerId) return
       if (roundDuration) room.roundDuration = roundDuration
       if (difficulty) room.difficulty = difficulty
       if (totalRounds) room.totalRounds = totalRounds
       io.to(code).emit('room-update', {
         players: playerList(room),
-        hostId: room.hostId,
+        hostPlayerId: room.hostPlayerId,
         gameState: room.gameState,
         drawerIndex: room.drawerIndex,
         roundDuration: room.roundDuration,
@@ -222,7 +235,7 @@ app.prepare().then(() => {
     socket.on('start-game', ({ code }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'lobby') return
-      if (room.hostId !== socket.id) return
+      if (room.hostPlayerId !== socket.data.playerId) return
       room.drawerIndex = 0
       room.currentRound = 0
       startRound(io, code)
@@ -231,7 +244,7 @@ app.prepare().then(() => {
     socket.on('next-round', ({ code }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'roundend') return
-      if (room.hostId !== socket.id) return
+      if (room.hostPlayerId !== socket.data.playerId) return
       room.drawerIndex = (room.drawerIndex + 1) % room.players.length
       startRound(io, code)
     })
@@ -240,7 +253,7 @@ app.prepare().then(() => {
       const room = rooms[code]
       if (!room) return
       const drawer = room.players[room.drawerIndex]
-      if (drawer?.id !== socket.id) return
+      if (drawer?.playerId !== socket.data.playerId) return
       socket.to(code).emit('remote-draw', { type, xn, yn })
     })
 
@@ -248,42 +261,38 @@ app.prepare().then(() => {
       const room = rooms[code]
       if (!room) return
       const drawer = room.players[room.drawerIndex]
-      if (drawer?.id !== socket.id) return
+      if (drawer?.playerId !== socket.data.playerId) return
       socket.to(code).emit('remote-clear')
     })
 
     socket.on('make-guess', ({ code, guess }) => {
       const room = rooms[code]
       if (!room || room.gameState !== 'playing') return
-      const player = room.players.find(p => p.id === socket.id)
+      const player = room.players.find(p => p.playerId === socket.data.playerId)
       if (!player) return
       const drawer = room.players[room.drawerIndex]
-      if (drawer?.id === socket.id) return
-      if (room.correctGuessers.has(socket.id)) return
+      if (drawer?.playerId === socket.data.playerId) return
+      if (room.correctGuessers.has(socket.data.playerId)) return
 
       const correct = guess.toLowerCase().trim() === room.currentWord.toLowerCase()
 
       if (correct) {
-        room.correctGuessers.add(socket.id)
+        room.correctGuessers.add(socket.data.playerId)
         room.correctCount++
-        // Decreasing points: 1st = 10, 2nd = 9, 3rd = 8 … min 1
         const points = Math.max(1, 11 - room.correctCount)
         player.score += points
         if (drawer) drawer.score += 5
 
-        // Private confirmation to the guesser only (includes pts earned)
         socket.emit('guess-correct', { points, players: playerList(room) })
 
-        // Broadcast to everyone WITHOUT the guess text (so others can't copy)
         io.to(code).emit('guess-made', {
           playerName: player.name,
-          guess: null,          // hidden
+          guess: null,
           correct: true,
           points,
           players: playerList(room),
         })
       } else {
-        // Wrong guess — visible text is fine
         io.to(code).emit('guess-made', {
           playerName: player.name,
           guess,
@@ -293,26 +302,35 @@ app.prepare().then(() => {
         })
       }
 
-      const nonDrawers = room.players.filter(p => p.id !== drawer?.id)
-      if (nonDrawers.length > 0 && nonDrawers.every(p => room.correctGuessers.has(p.id))) {
+      const nonDrawers = room.players.filter(p => p.playerId !== drawer?.playerId)
+      if (nonDrawers.length > 0 && nonDrawers.every(p => room.correctGuessers.has(p.playerId))) {
         endRound(io, code)
       }
     })
 
     socket.on('disconnect', () => {
       const code = socket.data.code
+      const playerId = socket.data.playerId
       if (!code || !rooms[code]) return
       const room = rooms[code]
+
+      // Save score so it can be restored on reconnect (for 60s)
+      const leaving = room.players.find(p => p.id === socket.id)
+      if (leaving) {
+        disconnectedScores[playerId] = leaving.score
+        setTimeout(() => { delete disconnectedScores[playerId] }, 60000)
+      }
+
       room.players = room.players.filter(p => p.id !== socket.id)
       if (room.players.length === 0) {
         if (room.timer) clearInterval(room.timer)
         delete rooms[code]
       } else {
         if (room.drawerIndex >= room.players.length) room.drawerIndex = 0
-        if (room.hostId === socket.id) room.hostId = room.players[0].id
+        if (room.hostPlayerId === playerId) room.hostPlayerId = room.players[0].playerId
         io.to(code).emit('room-update', {
           players: playerList(room),
-          hostId: room.hostId,
+          hostPlayerId: room.hostPlayerId,
           gameState: room.gameState,
           drawerIndex: room.drawerIndex,
           roundDuration: room.roundDuration,

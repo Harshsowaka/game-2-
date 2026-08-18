@@ -8,7 +8,7 @@ import LeaderboardWidget from '@/components/LeaderboardWidget'
 
 const AVATAR_COLORS = ['#4f46e5', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4']
 
-type Player = { id: string; name: string; score: number }
+type Player = { id: string; playerId: string; name: string; score: number }
 type Guess = { player: string; guess: string | null; correct: boolean; points: number }
 
 const DURATION_OPTIONS = [
@@ -38,9 +38,17 @@ function GamePageInner() {
 
   const [playerName, setPlayerName] = useState('')
   const [socketId, setSocketId] = useState('')
+  const [playerId] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    const stored = localStorage.getItem('playerId')
+    if (stored) return stored
+    const id = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+    localStorage.setItem('playerId', id)
+    return id
+  })
   const [gameState, setGameState] = useState('lobby')
   const [players, setPlayers] = useState<Player[]>([])
-  const [drawerSocketId, setDrawerSocketId] = useState('')
+  const [drawerPlayerId, setDrawerPlayerId] = useState('')
   const [currentWord, setCurrentWord] = useState<string | null>(null)
   const [wordLength, setWordLength] = useState(0)
   const [hint, setHint] = useState('')
@@ -57,16 +65,16 @@ function GamePageInner() {
   const [difficulty, setDifficulty] = useState('medium')
   const [totalRounds, setTotalRounds] = useState(3)
   const [currentRound, setCurrentRound] = useState(0)
-  const [hostId, setHostId] = useState('')
+  const [hostPlayerId, setHostPlayerId] = useState('')
 
   const canvasRef = useRef<GameCanvasHandle>(null)
   const socketRef = useRef<Socket | null>(null)
   const guessInputRef = useRef<HTMLInputElement>(null)
 
-  const isDrawing = !!socketId && socketId === drawerSocketId
-  const isHost = !!socketId && socketId === hostId
+  const isDrawing = !!playerId && playerId === drawerPlayerId
+  const isHost = !!playerId && playerId === hostPlayerId
   const scores = Object.fromEntries(players.map(p => [p.name, p.score]))
-  const drawerName = players.find(p => p.id === drawerSocketId)?.name || ''
+  const drawerName = players.find(p => p.playerId === drawerPlayerId)?.name || ''
 
   useEffect(() => {
     const name = localStorage.getItem('playerName')
@@ -83,7 +91,7 @@ function GamePageInner() {
     socket.on('connect', () => {
       setSocketId(socket.id ?? '')
       setConnected(true)
-      socket.emit('join-room', { code, name: playerName, isCreator })
+      socket.emit('join-room', { code, name: playerName, playerId, isCreator })
     })
 
     socket.on('room-not-found', () => {
@@ -91,25 +99,25 @@ function GamePageInner() {
       window.location.href = '/'
     })
 
-    socket.on('room-update', ({ players, hostId, gameState, drawerIndex, roundDuration, difficulty, totalRounds }: {
-      players: Player[]; hostId: string; gameState: string; drawerIndex: number;
+    socket.on('room-update', ({ players, hostPlayerId, gameState, drawerIndex, roundDuration, difficulty, totalRounds }: {
+      players: Player[]; hostPlayerId: string; gameState: string; drawerIndex: number;
       roundDuration: number; difficulty: string; totalRounds: number
     }) => {
       setPlayers(players)
-      setHostId(hostId)
+      setHostPlayerId(hostPlayerId)
       setGameState(gameState)
       setRoundDuration(roundDuration)
       setDifficulty(difficulty)
       if (totalRounds) setTotalRounds(totalRounds)
-      if (players[drawerIndex]) setDrawerSocketId(players[drawerIndex].id)
+      if (players[drawerIndex]) setDrawerPlayerId(players[drawerIndex].playerId)
     })
 
-    socket.on('round-started', ({ players, drawerSocketId, word, wordLength, hint, timeLeft, roundDuration, currentRound, totalRounds }: {
-      players: Player[]; drawerSocketId: string; word: string | null; wordLength: number;
+    socket.on('round-started', ({ players, drawerPlayerId, word, wordLength, hint, timeLeft, roundDuration, currentRound, totalRounds }: {
+      players: Player[]; drawerPlayerId: string; word: string | null; wordLength: number;
       hint: string; timeLeft: number; roundDuration: number; currentRound: number; totalRounds: number
     }) => {
       setPlayers(players)
-      setDrawerSocketId(drawerSocketId)
+      setDrawerPlayerId(drawerPlayerId)
       setCurrentWord(word)
       setWordLength(wordLength)
       setHint(hint)
@@ -318,13 +326,13 @@ function GamePageInner() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-7">
                 {players.map((player, idx) => (
                   <div key={player.id}
-                    className={`p-5 rounded-2xl border-2 text-center ${player.id === socketId ? 'border-purple-300 bg-purple-50' : 'border-gray-100 bg-gray-50'}`}>
+                    className={`p-5 rounded-2xl border-2 text-center ${player.playerId === playerId ? 'border-purple-300 bg-purple-50' : 'border-gray-100 bg-gray-50'}`}>
                     <div className="w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black mx-auto mb-3 text-white"
                       style={{ backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] }}>
                       {player.name[0].toUpperCase()}
                     </div>
                     <p className="font-bold text-gray-800 text-sm">{player.name}</p>
-                    {player.id === hostId && (
+                    {player.playerId === hostPlayerId && (
                       <p className="text-xs text-purple-500 font-bold mt-1">👑 Host</p>
                     )}
                   </div>
@@ -528,7 +536,7 @@ function GamePageInner() {
                         </div>
                         <div>
                           <p className="font-bold text-gray-800 text-sm leading-tight">
-                            {player.name}{player.id === socketId ? ' (you)' : ''}
+                            {player.name}{player.playerId === playerId ? ' (you)' : ''}
                           </p>
                           {player.id === drawerSocketId && (
                             <p className="text-xs text-amber-500 font-bold">✏️ Drawing</p>
@@ -726,7 +734,7 @@ function GamePageInner() {
                         {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                       </span>
                       <span className="font-bold text-gray-800">
-                        {p.name}{p.id === socketId ? ' (you)' : ''}
+                        {p.name}{p.playerId === playerId ? ' (you)' : ''}
                       </span>
                     </div>
                     <span className="font-black text-purple-600">{p.score} pts</span>
