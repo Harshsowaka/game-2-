@@ -38,14 +38,7 @@ function GamePageInner() {
 
   const [playerName, setPlayerName] = useState('')
   const [socketId, setSocketId] = useState('')
-  const [playerId] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    const stored = localStorage.getItem('playerId')
-    if (stored) return stored
-    const id = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
-    localStorage.setItem('playerId', id)
-    return id
-  })
+  const [playerId, setPlayerId] = useState('')
   const [gameState, setGameState] = useState('lobby')
   const [players, setPlayers] = useState<Player[]>([])
   const [drawerPlayerId, setDrawerPlayerId] = useState('')
@@ -80,10 +73,20 @@ function GamePageInner() {
     const name = localStorage.getItem('playerName')
       || `Player${Math.random().toString(36).slice(2, 5)}`
     setPlayerName(name)
+
+    // Load or create a stable playerId (client-side only — localStorage unavailable on server)
+    const storedId = localStorage.getItem('playerId')
+    if (storedId) {
+      setPlayerId(storedId)
+    } else {
+      const newId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+      localStorage.setItem('playerId', newId)
+      setPlayerId(newId)
+    }
   }, [])
 
   useEffect(() => {
-    if (!playerName || !code) return
+    if (!playerName || !code || !playerId) return
 
     const socket = io()
     socketRef.current = socket
@@ -186,7 +189,7 @@ function GamePageInner() {
     socket.on('disconnect', () => setConnected(false))
 
     return () => { socket.disconnect() }
-  }, [playerName, code, isCreator])
+  }, [playerName, code, playerId, isCreator])
 
   // Emit settings changes immediately (host only)
   const updateSettings = (newDuration?: number, newDifficulty?: string, newTotalRounds?: number) => {
@@ -200,6 +203,10 @@ function GamePageInner() {
 
   const handleStartGame = () => socketRef.current?.emit('start-game', { code })
   const handleNextRound = () => socketRef.current?.emit('next-round', { code })
+  const handleClaimHost = () => socketRef.current?.emit('claim-host', { code })
+
+  const hostInRoom = players.some(p => p.playerId === hostPlayerId)
+  const isActingHost = !hostInRoom && players[0]?.playerId === playerId
 
   const handleShareLeaderboard = () => {
     const medals = ['🥇', '🥈', '🥉']
@@ -426,9 +433,15 @@ function GamePageInner() {
                   style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
                   {players.length < 2 ? 'Waiting for more players...' : '🚀 Start Game'}
                 </button>
+              ) : isActingHost ? (
+                <button onClick={handleClaimHost}
+                  className="w-full py-4 rounded-2xl font-black text-lg text-white transition-all hover:opacity-90 active:scale-[0.99] shadow-lg"
+                  style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}>
+                  👑 Host left — Claim Host
+                </button>
               ) : (
                 <div className="text-center py-4 text-gray-400 font-medium">
-                  Waiting for the host to start...
+                  {hostInRoom ? 'Waiting for the host to start...' : 'Host is away...'}
                 </div>
               )}
             </div>
@@ -680,7 +693,7 @@ function GamePageInner() {
               <p className="text-gray-400 text-sm mb-8">
                 {correctCount} player{correctCount !== 1 ? 's' : ''} guessed correctly
               </p>
-              {isHost ? (
+              {(isHost || isActingHost) ? (
                 <button onClick={handleNextRound}
                   className="w-full py-4 rounded-2xl font-black text-lg text-white transition-all hover:opacity-90 active:scale-[0.98] shadow-lg"
                   style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>

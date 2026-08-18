@@ -308,6 +308,25 @@ app.prepare().then(() => {
       }
     })
 
+    // Allow first remaining player to claim host if original host is gone
+    socket.on('claim-host', ({ code }) => {
+      const room = rooms[code]
+      if (!room) return
+      const hostPresent = room.players.some(p => p.playerId === room.hostPlayerId)
+      if (hostPresent) return // real host is still here
+      if (room.players[0]?.playerId !== socket.data.playerId) return // only first player can claim
+      room.hostPlayerId = socket.data.playerId
+      io.to(code).emit('room-update', {
+        players: playerList(room),
+        hostPlayerId: room.hostPlayerId,
+        gameState: room.gameState,
+        drawerIndex: room.drawerIndex,
+        roundDuration: room.roundDuration,
+        difficulty: room.difficulty,
+        totalRounds: room.totalRounds,
+      })
+    })
+
     socket.on('disconnect', () => {
       const code = socket.data.code
       const playerId = socket.data.playerId
@@ -327,7 +346,6 @@ app.prepare().then(() => {
         delete rooms[code]
       } else {
         if (room.drawerIndex >= room.players.length) room.drawerIndex = 0
-        if (room.hostPlayerId === playerId) room.hostPlayerId = room.players[0].playerId
         io.to(code).emit('room-update', {
           players: playerList(room),
           hostPlayerId: room.hostPlayerId,
