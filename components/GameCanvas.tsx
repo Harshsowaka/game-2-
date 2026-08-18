@@ -33,6 +33,15 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ isActive, on
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
     contextRef.current = ctx
+
+    // Prevent page scroll on touch — passive:false lets preventDefault() work
+    const block = (e: TouchEvent) => e.preventDefault()
+    canvas.addEventListener('touchstart', block, { passive: false })
+    canvas.addEventListener('touchmove',  block, { passive: false })
+    return () => {
+      canvas.removeEventListener('touchstart', block)
+      canvas.removeEventListener('touchmove',  block)
+    }
   }, [])
 
   useImperativeHandle(ref, () => ({
@@ -123,6 +132,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ isActive, on
       onTouchStart={startDrawing}
       onTouchMove={draw}
       onTouchEnd={stopDrawing}
+      style={{ touchAction: 'none' }}
       className={`w-full bg-white border-2 border-gray-200 rounded-2xl aspect-square ${
         isActive ? 'cursor-crosshair' : 'cursor-default opacity-90'
       }`}

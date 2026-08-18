@@ -410,7 +410,9 @@ function GamePageInner() {
 
         {/* Playing */}
         {(gameState === 'playing' || gameState === 'roundend') && (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          <div className={`grid grid-cols-1 lg:grid-cols-5 gap-5 ${
+            !isDrawing && gameState === 'playing' && !myGuessCorrect ? 'pb-28 lg:pb-0' : ''
+          }`}>
 
             {/* Left — canvas 3/5 */}
             <div className="lg:col-span-3 space-y-4">
@@ -522,7 +524,7 @@ function GamePageInner() {
 
               {/* Guess input — guessers only, while round is live and not yet correct */}
               {!isDrawing && gameState === 'playing' && (
-                <div className={`bg-white rounded-3xl shadow-xl overflow-hidden border-2 ${
+                <div className={`hidden lg:block bg-white rounded-3xl shadow-xl overflow-hidden border-2 ${
                   myGuessCorrect ? 'border-green-200' : 'border-purple-200'
                 }`}>
                   {myGuessCorrect ? (
@@ -606,6 +608,33 @@ function GamePageInner() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Mobile fixed guess bar — visible on small screens only while guessing */}
+        {!isDrawing && gameState === 'playing' && !myGuessCorrect && (
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-purple-100 shadow-2xl px-4 py-3 flex gap-3 items-center">
+            <input
+              type="text"
+              value={guessInput}
+              onChange={e => setGuessInput(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && handleGuess()}
+              placeholder="Type your guess..."
+              className="flex-1 px-4 py-3 rounded-2xl border-2 focus:outline-none font-semibold text-gray-800 text-sm"
+              style={{ borderColor: '#e0d9ff', backgroundColor: '#faf9ff' }}
+              onFocus={e => { e.target.style.borderColor = '#7c3aed' }}
+              onBlur={e => { e.target.style.borderColor = '#e0d9ff' }}
+            />
+            <button onClick={handleGuess} disabled={!guessInput.trim()}
+              className="px-5 py-3 rounded-2xl font-black text-white text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 shadow-md whitespace-nowrap"
+              style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+              Guess ↵
+            </button>
+          </div>
+        )}
+        {!isDrawing && gameState === 'playing' && myGuessCorrect && (
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-green-50 border-t border-green-200 shadow-2xl px-4 py-4 text-center">
+            <p className="font-black text-green-600 text-sm">🎉 You got it! Waiting for others...</p>
           </div>
         )}
 
