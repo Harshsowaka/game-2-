@@ -526,7 +526,7 @@ function GamePageInner() {
                   {players.map((player, idx) => (
                     <div key={player.id}
                       className="flex items-center justify-between p-3 rounded-2xl border"
-                      style={player.id === drawerSocketId
+                      style={player.playerId === drawerPlayerId
                         ? { borderColor: '#f59e0b', backgroundColor: '#fffbeb' }
                         : { borderColor: '#f3f4f6', backgroundColor: '#f9fafb' }}>
                       <div className="flex items-center gap-2.5">
@@ -538,7 +538,7 @@ function GamePageInner() {
                           <p className="font-bold text-gray-800 text-sm leading-tight">
                             {player.name}{player.playerId === playerId ? ' (you)' : ''}
                           </p>
-                          {player.id === drawerSocketId && (
+                          {player.playerId === drawerPlayerId && (
                             <p className="text-xs text-amber-500 font-bold">✏️ Drawing</p>
                           )}
                         </div>
