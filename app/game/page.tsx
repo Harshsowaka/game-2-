@@ -293,7 +293,20 @@ function GamePageInner() {
               <div className="rounded-2xl p-5 mb-7 text-center border-2 border-purple-100"
                 style={{ background: 'linear-gradient(135deg, #f5f4ff, #fdf2ff)' }}>
                 <p className="text-xs font-black text-purple-400 uppercase tracking-widest mb-1">Game Code</p>
-                <p className="text-5xl font-black text-purple-600 tracking-[0.3em]">{code}</p>
+                <p className="text-5xl font-black text-purple-600 tracking-[0.3em] mb-4">{code}</p>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/game?code=${code}`
+                    if (navigator.share) {
+                      navigator.share({ title: 'Join my Sowaka Scribble game!', text: `Join my game with code ${code}`, url })
+                    } else {
+                      navigator.clipboard.writeText(url).then(() => alert('Link copied to clipboard!'))
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm text-white shadow transition hover:opacity-90 active:scale-[0.98]"
+                  style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}>
+                  🔗 Share Link
+                </button>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-7">
